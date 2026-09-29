@@ -72,7 +72,7 @@ done; echo
 
 ## Kết Quả Chạy Thật
 
-Đã kiểm tra trực tiếp service trên Render:
+Kết quả kiểm tra trực tiếp service Render hiện tại:
 
 ```
 GET /health
@@ -84,11 +84,11 @@ HTTP/2 200
 {"status":"ready","redis":true}
 
 POST /ask (không có API key): HTTP 401
+POST /ask (có API key, user `cp5-test`): HTTP 200
 ```
 
-Các lệnh kiểm tra `/ask` có API key và rate limit nằm ở mục 4–5. Kết quả 200
-và 429 trước đây được ghi nhận trên Railway; cần chạy lại trên Render trước khi
-ghi chúng là kết quả của service hiện tại.
+Các kết quả trên được ghi nhận từ URL Render hiện tại. Giá trị API key không
+được ghi vào tài liệu hay repository.
 
 ## Ảnh Chụp Màn Hình
 
