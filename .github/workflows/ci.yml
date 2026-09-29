@@ -1,0 +1,87 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      AGENT_API_KEY: ci-dummy
+      REDIS_URL: "fake://"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Run unit and checkpoint tests
+        run: >-
+          python -m pytest tests/
+          --ignore=tests/test_cp5.py
+          --ignore=tests/test_bonus_cicd.py
+          -m "not docker" -v
+
+  build:
+    name: Build Docker image
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t day12-agent:ci .
+
+  deploy:
+    name: Deploy to Render
+    needs: [test, build]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+      PUBLIC_URL: ${{ vars.PUBLIC_URL }}
+    steps:
+      - name: Check deployment settings
+        run: |
+          test -n "$RENDER_DEPLOY_HOOK_URL"
+          test -n "$PUBLIC_URL"
+
+      - name: Trigger Render deploy for this commit
+        run: >-
+          curl --fail --silent --show-error --get
+          --data-urlencode "ref=$GITHUB_SHA"
+          "$RENDER_DEPLOY_HOOK_URL" >/dev/null
+
+      - name: Smoke test deployment
+        run: |
+          url="${PUBLIC_URL%/}"
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error "$url/health" >/dev/null \
+              && curl --fail --silent --show-error "$url/ready" >/dev/null; then
+              echo "Health and readiness checks passed."
+              exit 0
+            fi
+            echo "Service is not ready yet (attempt $attempt/30)."
+            sleep 10
+          done
+          echo "Deployment did not become healthy in time." >&2
+          exit 1
