@@ -74,13 +74,17 @@ jobs:
       - name: Smoke test deployment
         run: |
           url="${PUBLIC_URL%/}"
-          for attempt in $(seq 1 30); do
-            if curl --fail --silent --show-error "$url/health" >/dev/null \
-              && curl --fail --silent --show-error "$url/ready" >/dev/null; then
+          for attempt in $(seq 1 60); do
+            deployed_sha="$(curl --fail --silent --max-time 20 \
+              --dump-header - --output /dev/null "$url/health" 2>/dev/null \
+              | awk 'tolower($1) == "x-render-git-commit:" { gsub("\r", "", $2); print $2 }' \
+              || true)"
+            if [ "$deployed_sha" = "$GITHUB_SHA" ] \
+              && curl --fail --silent "$url/ready" >/dev/null; then
               echo "Health and readiness checks passed."
               exit 0
             fi
-            echo "Service is not ready yet (attempt $attempt/30)."
+            echo "Waiting for Render to serve the tested commit (attempt $attempt/60)."
             sleep 10
           done
           echo "Deployment did not become healthy in time." >&2

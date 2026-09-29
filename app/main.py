@@ -13,6 +13,7 @@ Luồng một request tới /ask:
 
 from __future__ import annotations
 
+import os
 from contextlib import asynccontextmanager
 from functools import lru_cache
 
@@ -67,6 +68,15 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(title="Day 12 Production Agent", version=SERVICE_VERSION, lifespan=lifespan)
+
+
+@app.middleware("http")
+async def expose_render_commit_on_health(request, call_next):
+    response = await call_next(request)
+    commit = os.getenv("RENDER_GIT_COMMIT")
+    if request.url.path == "/health" and commit:
+        response.headers["X-Render-Git-Commit"] = commit
+    return response
 
 
 class AskRequest(BaseModel):
